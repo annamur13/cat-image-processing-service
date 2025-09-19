@@ -33,6 +33,12 @@ coverage.xml
 .env.local
 .env.production
 
+# Flake8 config
+.flake8
+setup.cfg
+tox.ini
+pytest.ini
+
 # IDE
 .vscode/
 .idea/
