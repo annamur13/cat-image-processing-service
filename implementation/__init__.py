@@ -1,5 +1,5 @@
-from .opencv_image_processing import OpenCVImageProcessing
-from .image_processing import ImageProcessing
+# implementation/__init__.py
+from .data_processing import DataProcessing
+from .weather_analysis import WeatherAnalysis
 
-
-__all__ = ['OpenCVImageProcessing']
+__all__ = ['DataProcessing', 'WeatherAnalysis']

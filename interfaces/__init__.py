@@ -1,5 +1,3 @@
-from .i_image_processing import IImageProcessing
+from .i_data_processing import IDataProcessing
 
-
-class Limage_processing:
-    pass
+__all__ = ['IDataProcessing']
