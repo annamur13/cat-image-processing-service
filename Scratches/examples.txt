@@ -1,0 +1,19 @@
+python main.py edges image.jpg --mode manual
+python main.py grayscale image.jpg --image-type color
+
+python main.py edges image.jpg --image-type grayscale --mode opencv
+
+py main.py cat-api "siamese" --limit 2
+
+py main.py cat-api "siamese" --limit 2 --image-type color
+py main.py cat-api "persian" --limit 1 --image-type grayscale
+
+py main.py cat-api "random" --breeds siamese persian ragdoll --limit 2
+
+python main.py cat-api persian --limit 2
+
+python main.py edges photo.jpg --mode manual
+
+py main.py add 1_Siamese_GrayscaleCatImage_original.png --input2 1_Siamese_GrayscaleCatImage_original.png
+
+python main.py blend img1.jpg --input2 img2.jpg --alpha 0.7
