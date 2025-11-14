@@ -6,6 +6,7 @@ from Utils import CSVConfig
 
 
 def main():
+
     print("ЗАПУСК АНАЛИЗА ПОГОДНЫХ ДАННЫХ")
     print("=" * 50)
 

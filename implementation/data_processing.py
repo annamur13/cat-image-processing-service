@@ -18,12 +18,14 @@ class DataProcessing(IDataProcessing):
 
     def clean_data_generator(self, data_generator):
         required_columns = CSVConfig.get_data_columns()
+        required_set = set(required_columns)
 
         for chunk_num, chunk in enumerate(data_generator):
             print(f"Очистка чанка {chunk_num + 1}...")
 
-            existing_columns = [col for col in required_columns if col in chunk.columns]
-            missing_columns = [col for col in required_columns if col not in chunk.columns]
+            chunk_columns_set = set(chunk.columns)
+            existing_columns = required_set & chunk_columns_set
+            missing_columns = required_set - chunk_columns_set
 
             if missing_columns:
                 print(f"Отсутствуют колонки: {missing_columns}")
@@ -34,7 +36,7 @@ class DataProcessing(IDataProcessing):
 
             original_count = len(chunk)
 
-            chunk = chunk.dropna(subset=existing_columns)
+            chunk = chunk.dropna(subset=list(existing_columns))
 
             if self.column_names['date'] in chunk.columns:
                 chunk[self.column_names['date']] = pd.to_datetime(
@@ -60,7 +62,6 @@ class DataProcessing(IDataProcessing):
             yield chunk
 
     def extract_year_month_generator(self, data_generator):
-        """Генератор для извлечения года и месяца"""
         for chunk_num, chunk in enumerate(data_generator):
             print(f"Извлечение дат из чанка {chunk_num + 1}...")
 
