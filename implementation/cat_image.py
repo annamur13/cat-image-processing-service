@@ -14,9 +14,11 @@ class CatImage:
         self._image_data = image_data
         self._url = url
         self._breed = breed
-        self._id = image_id
+        #self._id = image_id
         self._manual_processor = ImageProcessing()
         self._opencv_processor = OpenCVImageProcessing()
+        self.assigned_index = None  # Порядковый номер, присвоенный при скачивании
+        self.image_id = image_id
 
     @property
     def image_data(self) -> np.ndarray:
@@ -79,3 +81,11 @@ class CatImage:
         if image_data is None:
             raise ValueError(f"Could not load image from {file_path}")
         return cls(image_data, url, breed, image_id)
+
+    def get_filename_prefix(self) -> str:
+        """Возвращает префикс для имени файла на основе присвоенного номера"""
+        if self.assigned_index is not None:
+            return f"{self.assigned_index:03d}_{self.breed.replace(' ', '_')}"
+        else:
+            # Fallback если номер не был присвоен
+            return f"unknown_{self.breed.replace(' ', '_')}"

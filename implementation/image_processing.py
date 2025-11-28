@@ -1,18 +1,32 @@
 import interfaces
-
 import numpy as np
 from scipy.ndimage import maximum_filter
+from concurrent.futures import ProcessPoolExecutor
+import multiprocessing as mp
+from typing import Dict, Tuple, List
+import functools
+
 
 class ImageProcessing(interfaces.IImageProcessing):
 
     def __init__(self):
-
         self.kernels = {
             "blur": np.ones((3, 3)) / 9,
             "sharpen": np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]),
             "sobel_x": np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]),
             "sobel_y": np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]])
         }
+        self._executor = None
+
+    @property
+    def executor(self):
+        if self._executor is None:
+            self._executor = ProcessPoolExecutor()
+        return self._executor
+
+    def __del__(self):
+        if self._executor is not None:
+            self._executor.shutdown(wait=True)
 
     def convolution(self, image: np.ndarray, kernel_type: str, clip: bool = True) -> np.ndarray:
         if kernel_type not in self.kernels:
@@ -41,11 +55,91 @@ class ImageProcessing(interfaces.IImageProcessing):
 
         return output
 
+    def convolution_parallel(self, image: np.ndarray, kernel_type: str, clip: bool = True,
+                             num_processes: int = None) -> np.ndarray:
+        """Параллельная версия свертки с использованием ProcessPoolExecutor"""
+        if kernel_type not in self.kernels:
+            raise ValueError(f"Неизвестный тип kernel: {kernel_type}. Доступные: {list(self.kernels.keys())}")
+
+        kernel = self.kernels[kernel_type]
+        if len(image.shape) == 3:
+            image = self.rgb_to_grayscale(image)
+
+        # Разделяем изображение на части для параллельной обработки
+        chunks = self._split_image_for_convolution(image, kernel, num_processes)
+
+        # Создаем частичную функцию для удобства
+        conv_func = functools.partial(_convolution_worker, kernel=kernel, clip=clip)
+
+        # Параллельно обрабатываем части изображения
+        with ProcessPoolExecutor(max_workers=num_processes) as executor:
+            results = list(executor.map(conv_func, chunks))
+
+        # Собираем результаты
+        return self._merge_convolution_results(results, image.shape, kernel.shape)
+
+    def _split_image_for_convolution(self, image: np.ndarray, kernel: np.ndarray,
+                                     num_processes: int = None) -> List[Dict]:
+        """Разделяет изображение на части для параллельной обработки"""
+        if num_processes is None:
+            num_processes = mp.cpu_count()
+
+        img_h, img_w = image.shape
+        kernel_h, kernel_w = kernel.shape
+        pad_h = kernel_h // 2
+        pad_w = kernel_w // 2
+
+        # Добавляем padding ко всему изображению
+        padded_image = np.pad(image, ((pad_h, pad_h), (pad_w, pad_w)),
+                              mode='constant', constant_values=0)
+
+        chunks = []
+        rows_per_process = max(1, img_h // num_processes)
+
+        for i in range(num_processes):
+            start_row = i * rows_per_process
+            end_row = min((i + 1) * rows_per_process, img_h)
+
+            if start_row >= img_h:
+                break
+
+            # Вычисляем границы для padded изображения
+            padded_start_row = start_row
+            padded_end_row = end_row + kernel_h - 1
+
+            chunk_data = {
+                'image_chunk': padded_image[padded_start_row:padded_end_row],
+                'global_start_row': start_row,
+                'global_end_row': end_row,
+                'padding': (pad_h, pad_w)
+            }
+            chunks.append(chunk_data)
+
+        return chunks
+
+    def _merge_convolution_results(self, results: List[np.ndarray],
+                                   original_shape: Tuple, kernel_shape: Tuple) -> np.ndarray:
+        """Объединяет результаты параллельной свертки"""
+        img_h, img_w = original_shape
+        kernel_h, kernel_w = kernel_shape
+        pad_h = kernel_h // 2
+        pad_w = kernel_w // 2
+
+        result_image = np.zeros((img_h, img_w), dtype=np.float32)
+
+        current_row = 0
+        for result in results:
+            chunk_height = result.shape[0]
+            result_image[current_row:current_row + chunk_height] = result
+            current_row += chunk_height
+
+        return result_image
+
     def rgb_to_grayscale(self, image: np.ndarray) -> np.ndarray:
         if image.ndim == 3 and image.shape[2] == 3 and image.dtype == np.uint8:
-            R = image[:,:, 0]
-            G = image[:,:, 1]
-            B = image[:,:, 2]
+            R = image[:, :, 0]
+            G = image[:, :, 1]
+            B = image[:, :, 2]
 
             gray = 0.299 * R + 0.587 * G + 0.114 * B
             gray = np.round(gray)
@@ -66,6 +160,19 @@ class ImageProcessing(interfaces.IImageProcessing):
             print("Ошибка: некорректный тип изображения")
             return image
 
+    def gamma_correction_parallel(self, images: List[np.ndarray], gamma: float,
+                                  num_processes: int = None) -> List[np.ndarray]:
+        """Параллельная гамма-коррекция для списка изображений"""
+        if num_processes is None:
+            num_processes = min(mp.cpu_count(), len(images))
+
+        gamma_func = functools.partial(_gamma_correction_worker, gamma=gamma)
+
+        with ProcessPoolExecutor(max_workers=num_processes) as executor:
+            results = list(executor.map(gamma_func, images))
+
+        return results
+
     def edge_detection(self, image: np.ndarray, threshold: float = 0.2) -> np.ndarray:
         gray = self.rgb_to_grayscale(image).astype(np.float32)
 
@@ -81,8 +188,24 @@ class ImageProcessing(interfaces.IImageProcessing):
 
         return edges.astype(np.uint8)
 
-    def colorful_edge_detection(self, image: np.ndarray, threshold: float = 0.2) -> np.ndarray:
+    def edge_detection_parallel(self, image: np.ndarray, threshold: float = 0.2,
+                                num_processes: int = None) -> np.ndarray:
+        """Параллельная версия детекции краев"""
+        gray = self.rgb_to_grayscale(image).astype(np.float32)
 
+        # Параллельно вычисляем градиенты
+        grad_x = self.convolution_parallel(gray, "sobel_x", clip=False, num_processes=num_processes)
+        grad_y = self.convolution_parallel(gray, "sobel_y", clip=False, num_processes=num_processes)
+
+        magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+        magnitude_normalized = magnitude / magnitude.max()
+
+        edges = np.zeros_like(magnitude_normalized)
+        edges[magnitude_normalized > threshold] = 255
+
+        return edges.astype(np.uint8)
+
+    def colorful_edge_detection(self, image: np.ndarray, threshold: float = 0.2) -> np.ndarray:
         if len(image.shape) != 3 or image.shape[2] != 3:
             raise ValueError("Изображение должно быть цветным в формате RGB")
 
@@ -106,6 +229,33 @@ class ImageProcessing(interfaces.IImageProcessing):
 
         edges_color = np.zeros_like(color_image)
 
+        edge_mask = magnitude_normalized > threshold
+        edges_color[edge_mask] = color_image[edge_mask]
+
+        return edges_color.astype(np.uint8)
+
+    def colorful_edge_detection_parallel(self, image: np.ndarray, threshold: float = 0.2,
+                                         num_processes: int = None) -> np.ndarray:
+        """Параллельная версия цветной детекции краев"""
+        if len(image.shape) != 3 or image.shape[2] != 3:
+            raise ValueError("Изображение должно быть цветным в формате RGB")
+
+        color_image = image.astype(np.float32)
+
+        # Параллельно вычисляем градиенты для каждого канала
+        channels = []
+        for channel in range(3):
+            grad_x = self.convolution_parallel(color_image[:, :, channel], "sobel_x",
+                                               clip=False, num_processes=num_processes)
+            grad_y = self.convolution_parallel(color_image[:, :, channel], "sobel_y",
+                                               clip=False, num_processes=num_processes)
+            magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+            channels.append(magnitude)
+
+        magnitude_combined = np.maximum.reduce(channels)
+        magnitude_normalized = magnitude_combined / magnitude_combined.max()
+
+        edges_color = np.zeros_like(color_image)
         edge_mask = magnitude_normalized > threshold
         edges_color[edge_mask] = color_image[edge_mask]
 
@@ -142,10 +292,69 @@ class ImageProcessing(interfaces.IImageProcessing):
 
         for y, x in zip(ys, xs):
             if 3 <= y < result.shape[0] - 3 and 3 <= x < result.shape[1] - 3:
-
                 size = 3
                 color = [0, 255, 0]
                 result[y - size:y + size + 1, x] = color
                 result[y, x - size:x + size + 1] = color
 
         return result
+
+    def process_multiple_images(self, images: List[np.ndarray], operation: str,
+                                **kwargs) -> List[np.ndarray]:
+        """Параллельная обработка нескольких изображений"""
+        if operation == "edge_detection":
+            func = functools.partial(_edge_detection_worker, **kwargs)
+        elif operation == "gamma_correction":
+            func = functools.partial(_gamma_correction_worker, **kwargs)
+        else:
+            raise ValueError(f"Неизвестная операция: {operation}")
+
+        num_processes = min(mp.cpu_count(), len(images))
+
+        with ProcessPoolExecutor(max_workers=num_processes) as executor:
+            results = list(executor.map(func, images))
+
+        return results
+
+
+# Вспомогательные функции для работы в процессах
+def _convolution_worker(chunk_data: Dict, kernel: np.ndarray, clip: bool) -> np.ndarray:
+    """Рабочая функция для параллельной свертки"""
+    image_chunk = chunk_data['image_chunk']
+    global_start_row = chunk_data['global_start_row']
+    global_end_row = chunk_data['global_end_row']
+    padding = chunk_data['padding']
+
+    pad_h, pad_w = padding
+    kernel_h, kernel_w = kernel.shape
+
+    chunk_height = global_end_row - global_start_row
+    output_chunk = np.zeros((chunk_height, image_chunk.shape[1] - 2 * pad_w), dtype=np.float32)
+
+    for y in range(chunk_height):
+        for x in range(output_chunk.shape[1]):
+            region = image_chunk[y:y + kernel_h, x:x + kernel_w]
+            output_chunk[y, x] = np.sum(region * kernel)
+
+    if clip:
+        output_chunk = np.clip(output_chunk, 0, 255).astype(np.uint8)
+
+    return output_chunk
+
+
+def _gamma_correction_worker(image: np.ndarray, gamma: float) -> np.ndarray:
+    """Рабочая функция для гамма-коррекции"""
+    if image.dtype == np.uint8:
+        normalized_image = image.astype(np.float32) / 255.0
+        corrected_array = normalized_image ** gamma
+        result = np.clip(np.round(corrected_array * 255), 0, 255).astype(np.uint8)
+        return result
+    else:
+        return image
+
+
+def _edge_detection_worker(image: np.ndarray, threshold: float = 0.2) -> np.ndarray:
+    """Рабочая функция для детекции краев"""
+    # Упрощенная версия для демонстрации
+    processing = ImageProcessing()
+    return processing.edge_detection(image, threshold)
