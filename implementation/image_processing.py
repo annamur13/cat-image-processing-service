@@ -5,7 +5,8 @@ from concurrent.futures import ProcessPoolExecutor
 import multiprocessing as mp
 from typing import Dict, Tuple, List
 import functools
-
+from logging_config import logger
+from interfaces.i_image_processing import IImageProcessing
 
 class ImageProcessing(interfaces.IImageProcessing):
 
@@ -57,7 +58,6 @@ class ImageProcessing(interfaces.IImageProcessing):
 
     def convolution_parallel(self, image: np.ndarray, kernel_type: str, clip: bool = True,
                              num_processes: int = None) -> np.ndarray:
-        """Параллельная версия свертки с использованием ProcessPoolExecutor"""
         if kernel_type not in self.kernels:
             raise ValueError(f"Неизвестный тип kernel: {kernel_type}. Доступные: {list(self.kernels.keys())}")
 
@@ -65,22 +65,17 @@ class ImageProcessing(interfaces.IImageProcessing):
         if len(image.shape) == 3:
             image = self.rgb_to_grayscale(image)
 
-        # Разделяем изображение на части для параллельной обработки
         chunks = self._split_image_for_convolution(image, kernel, num_processes)
 
-        # Создаем частичную функцию для удобства
         conv_func = functools.partial(_convolution_worker, kernel=kernel, clip=clip)
 
-        # Параллельно обрабатываем части изображения
         with ProcessPoolExecutor(max_workers=num_processes) as executor:
             results = list(executor.map(conv_func, chunks))
 
-        # Собираем результаты
         return self._merge_convolution_results(results, image.shape, kernel.shape)
 
     def _split_image_for_convolution(self, image: np.ndarray, kernel: np.ndarray,
                                      num_processes: int = None) -> List[Dict]:
-        """Разделяет изображение на части для параллельной обработки"""
         if num_processes is None:
             num_processes = mp.cpu_count()
 
@@ -89,7 +84,6 @@ class ImageProcessing(interfaces.IImageProcessing):
         pad_h = kernel_h // 2
         pad_w = kernel_w // 2
 
-        # Добавляем padding ко всему изображению
         padded_image = np.pad(image, ((pad_h, pad_h), (pad_w, pad_w)),
                               mode='constant', constant_values=0)
 
@@ -103,7 +97,6 @@ class ImageProcessing(interfaces.IImageProcessing):
             if start_row >= img_h:
                 break
 
-            # Вычисляем границы для padded изображения
             padded_start_row = start_row
             padded_end_row = end_row + kernel_h - 1
 
@@ -119,7 +112,6 @@ class ImageProcessing(interfaces.IImageProcessing):
 
     def _merge_convolution_results(self, results: List[np.ndarray],
                                    original_shape: Tuple, kernel_shape: Tuple) -> np.ndarray:
-        """Объединяет результаты параллельной свертки"""
         img_h, img_w = original_shape
         kernel_h, kernel_w = kernel_shape
         pad_h = kernel_h // 2
@@ -162,7 +154,6 @@ class ImageProcessing(interfaces.IImageProcessing):
 
     def gamma_correction_parallel(self, images: List[np.ndarray], gamma: float,
                                   num_processes: int = None) -> List[np.ndarray]:
-        """Параллельная гамма-коррекция для списка изображений"""
         if num_processes is None:
             num_processes = min(mp.cpu_count(), len(images))
 
@@ -190,10 +181,8 @@ class ImageProcessing(interfaces.IImageProcessing):
 
     def edge_detection_parallel(self, image: np.ndarray, threshold: float = 0.2,
                                 num_processes: int = None) -> np.ndarray:
-        """Параллельная версия детекции краев"""
         gray = self.rgb_to_grayscale(image).astype(np.float32)
 
-        # Параллельно вычисляем градиенты
         grad_x = self.convolution_parallel(gray, "sobel_x", clip=False, num_processes=num_processes)
         grad_y = self.convolution_parallel(gray, "sobel_y", clip=False, num_processes=num_processes)
 
@@ -236,13 +225,11 @@ class ImageProcessing(interfaces.IImageProcessing):
 
     def colorful_edge_detection_parallel(self, image: np.ndarray, threshold: float = 0.2,
                                          num_processes: int = None) -> np.ndarray:
-        """Параллельная версия цветной детекции краев"""
         if len(image.shape) != 3 or image.shape[2] != 3:
             raise ValueError("Изображение должно быть цветным в формате RGB")
 
         color_image = image.astype(np.float32)
 
-        # Параллельно вычисляем градиенты для каждого канала
         channels = []
         for channel in range(3):
             grad_x = self.convolution_parallel(color_image[:, :, channel], "sobel_x",
@@ -301,7 +288,6 @@ class ImageProcessing(interfaces.IImageProcessing):
 
     def process_multiple_images(self, images: List[np.ndarray], operation: str,
                                 **kwargs) -> List[np.ndarray]:
-        """Параллельная обработка нескольких изображений"""
         if operation == "edge_detection":
             func = functools.partial(_edge_detection_worker, **kwargs)
         elif operation == "gamma_correction":
@@ -317,9 +303,7 @@ class ImageProcessing(interfaces.IImageProcessing):
         return results
 
 
-# Вспомогательные функции для работы в процессах
 def _convolution_worker(chunk_data: Dict, kernel: np.ndarray, clip: bool) -> np.ndarray:
-    """Рабочая функция для параллельной свертки"""
     image_chunk = chunk_data['image_chunk']
     global_start_row = chunk_data['global_start_row']
     global_end_row = chunk_data['global_end_row']
@@ -343,7 +327,6 @@ def _convolution_worker(chunk_data: Dict, kernel: np.ndarray, clip: bool) -> np.
 
 
 def _gamma_correction_worker(image: np.ndarray, gamma: float) -> np.ndarray:
-    """Рабочая функция для гамма-коррекции"""
     if image.dtype == np.uint8:
         normalized_image = image.astype(np.float32) / 255.0
         corrected_array = normalized_image ** gamma
@@ -354,7 +337,5 @@ def _gamma_correction_worker(image: np.ndarray, gamma: float) -> np.ndarray:
 
 
 def _edge_detection_worker(image: np.ndarray, threshold: float = 0.2) -> np.ndarray:
-    """Рабочая функция для детекции краев"""
-    # Упрощенная версия для демонстрации
     processing = ImageProcessing()
     return processing.edge_detection(image, threshold)

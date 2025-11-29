@@ -4,11 +4,9 @@ from pathlib import Path
 from typing import Optional, Union, Dict, Any
 from implementation.image_processing import ImageProcessing
 from implementation.opencv_image_processing import OpenCVImageProcessing
-
+from logging_config import logger
 
 class CatImage:
-
-    #инкапсуляция изображения кота и его метаданных
 
     def __init__(self, image_data: np.ndarray, url: str, breed: str, image_id: str = ""):
         self._image_data = image_data
@@ -17,7 +15,7 @@ class CatImage:
         #self._id = image_id
         self._manual_processor = ImageProcessing()
         self._opencv_processor = OpenCVImageProcessing()
-        self.assigned_index = None  # Порядковый номер, присвоенный при скачивании
+        self.assigned_index = None
         self.image_id = image_id
 
     @property
@@ -83,9 +81,7 @@ class CatImage:
         return cls(image_data, url, breed, image_id)
 
     def get_filename_prefix(self) -> str:
-        """Возвращает префикс для имени файла на основе присвоенного номера"""
         if self.assigned_index is not None:
             return f"{self.assigned_index:03d}_{self.breed.replace(' ', '_')}"
         else:
-            # Fallback если номер не был присвоен
             return f"unknown_{self.breed.replace(' ', '_')}"

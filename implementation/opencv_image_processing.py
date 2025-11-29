@@ -1,7 +1,7 @@
 import cv2
 import interfaces
 import numpy as np
-
+from logging_config import logger
 class OpenCVImageProcessing(interfaces.IImageProcessing):
 
     def convolution(self, image: np.ndarray, kernel: np.ndarray) -> np.ndarray:

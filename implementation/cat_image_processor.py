@@ -5,7 +5,7 @@ import os
 from typing import List, Optional, Dict, Any
 import cv2
 import numpy as np
-
+from logging_config import logger
 from implementation.cat_image import CatImage
 from Utils.timer_decorator import timer_decorator
 import config
@@ -47,15 +47,10 @@ class CatImageProcessor:
 
             headers = {"x-api-key": self._api_key} if self._api_key else {}
 
-            #print(f"URL: {url}")
-            #print(f"Params: {params}")
-
             response = await self._client.get(url, params=params, headers=headers)
-            #print(f"Response status: {response.status_code}")
 
             response.raise_for_status()
             data = response.json()
-            #print(f"Received data: {len(data)} items")
 
             download_tasks = [self._download_single_image(img_data) for img_data in data]
             cat_images = await asyncio.gather(*download_tasks)
@@ -79,23 +74,18 @@ class CatImageProcessor:
             url = f"{self._base_url}/breeds"
             headers = {"x-api-key": self._api_key} if self._api_key else {}
 
-            #print(f"Fetching breeds from: {url}")
             response = await self._client.get(url, headers=headers)
-            #print(f"Breeds response status: {response.status_code}")
 
             response.raise_for_status()
             breeds = response.json()
-            #print(f"Found {len(breeds)} breeds")
 
             for breed in breeds:
                 if breed['name'].lower() == breed_name.lower():
                     return breed['id']
 
-            #print(f"Breed '{breed_name}' not found. Available breeds: {[b['name'] for b in breeds][:10]}...")
             return None
 
         except Exception as e:
-            #print(f"Error getting breed ID for '{breed_name}': {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -107,8 +97,6 @@ class CatImageProcessor:
 
             breed_info = img_data.get('breeds', [{}])[0] if img_data.get('breeds') else {}
             breed_name = breed_info.get('name', 'unknown')
-
-            #print(f"Downloading image {image_id} ({breed_name}) from {image_url}")
 
             response = await self._client.get(image_url)
             response.raise_for_status()
@@ -151,7 +139,11 @@ class CatImageProcessor:
             index = cat_image.assigned_index
             print(f"\n--- Processing image {index} ---")
 
-            prefix = f"{index:03d}_{cat_image.breed.replace(' ', '_')}"
+            if index is None:
+                index_str = cat_image.image_id or "unknown"
+                prefix = f"{index_str}_{cat_image.breed.replace(' ', '_')}"
+            else:
+                prefix = f"{index:03d}_{cat_image.breed.replace(' ', '_')}"
 
             original_filename = f"{prefix}_original.png"
             original_path = os.path.join(output_dir, original_filename)
