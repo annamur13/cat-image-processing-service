@@ -5,11 +5,9 @@ import os
 from typing import List, Optional, Dict, Any
 import cv2
 import numpy as np
-from logging_config import logger
-from implementation.cat_image import CatImage
-from Utils.timer_decorator import timer_decorator
-import config
-
+from cat_image_processor.implementation.cat_image import CatImage
+from cat_image_processor.Utils.timer_decorator import timer_decorator
+from cat_image_processor import config
 
 class CatImageProcessor:
 

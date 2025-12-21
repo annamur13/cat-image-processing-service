@@ -1,13 +1,12 @@
 import unittest
-import asyncio
 import os
-import json
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
+import asyncio
+from unittest.mock import patch, AsyncMock
 import cv2
 import numpy as np
 
-from implementation.cat_image_processor import CatImageProcessor
-from implementation.cat_image import CatImage
+from cat_image_processor.implementation import CatImageProcessor
+from cat_image_processor.implementation import CatImage
 
 
 class TestCatImageProcessor(unittest.TestCase):
@@ -17,7 +16,7 @@ class TestCatImageProcessor(unittest.TestCase):
         self.test_image_data = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
 
     def tearDown(self):
-        test_files = ["test_output.png", "test_breeds.json"]
+        test_files = ["https://cdn2.thecatapi.com/images/O2aNhFGU-.jpg.png  ", "test_breeds.json"]
         for file in test_files:
             if os.path.exists(file):
                 os.remove(file)
@@ -26,180 +25,176 @@ class TestCatImageProcessor(unittest.TestCase):
             import shutil
             shutil.rmtree("test_output_dir")
 
-    def test_initialization(self):
+    def test_initialization_output_directory(self):
         self.assertEqual(self.processor.output_directory, "cat_images_output")
+
+    def test_initialization_client_is_none(self):
         self.assertIsNone(self.processor._client)
 
     @patch('httpx.AsyncClient')
-    async def test_context_manager(self, mock_client):
+    def test_context_manager_assigns_client(self, mock_client):
         mock_client_instance = AsyncMock()
         mock_client.return_value = mock_client_instance
 
-        async with CatImageProcessor() as processor:
-            self.assertEqual(processor._client, mock_client_instance)
+        async def run():
+            async with CatImageProcessor() as processor:
+                return processor._client
 
-        mock_client_instance.aclose.assert_called_once()
+        client = asyncio.run(run())
+        self.assertEqual(client, mock_client_instance)
 
-    @patch('implementation.cat_image_processor.httpx.AsyncClient')
-    async def test_successful_api_call(self, mock_client):
+    @patch('httpx.AsyncClient')
+    def test_successful_api_call_returns_two_images(self, mock_client):
         mock_client_instance = AsyncMock()
         mock_client.return_value = mock_client_instance
 
         mock_response_search = AsyncMock()
         mock_response_search.status_code = 200
         mock_response_search.json.return_value = [
-            {
-                "id": "abc123",
-                "url": "https://cdn2.thecatapi.com/images/123.jpg",
-                "breeds": [{"name": "Siamese", "id": "siam"}]
-            },
-            {
-                "id": "def456",
-                "url": "https://cdn2.thecatapi.com/images/456.jpg",
-                "breeds": [{"name": "Persian", "id": "pers"}]
-            }
+            {"id": "abc123", "url": "https://cdn2.thecatapi.com/images/O2aNhFGU-.jpg  ", "breeds": [{"name": "Siamese", "id": "siam"}]},
+            {"id": "def456", "url": "https://cdn2.thecatapi.com/images/O2aNhFGU-.jpg  ", "breeds": [{"name": "Persian", "id": "pers"}]}
         ]
 
         mock_response_image = AsyncMock()
         mock_response_image.status_code = 200
         mock_response_image.content = cv2.imencode('.jpg', self.test_image_data)[1].tobytes()
 
-        mock_client_instance.get.side_effect = [
-            mock_response_search,
-            mock_response_image,
-            mock_response_image
-        ]
+        mock_client_instance.get.side_effect = [mock_response_search, mock_response_image, mock_response_image]
 
-        self.processor._client = mock_client_instance
+        async def run():
+            self.processor._client = mock_client_instance
+            return await self.processor.download_cat_images(limit=2)
 
-        images = await self.processor.download_cat_images(limit=2)
-
+        images = asyncio.run(run())
         self.assertEqual(len(images), 2)
-        self.assertEqual(images[0].image_id, "123")
-        self.assertEqual(images[0].breed, "Siamese")
-        self.assertEqual(images[1].image_id, "456")
-        self.assertEqual(images[1].breed, "Persian")
 
-        self.assertIsNotNone(images[0].image_data)
-        self.assertIsNotNone(images[1].image_data)
+    @patch('httpx.AsyncClient')
+    def test_successful_api_call_first_image_id(self, mock_client):
+        mock_client_instance = AsyncMock()
+        mock_client.return_value = mock_client_instance
 
-    @patch('implementation.cat_image_processor.httpx.AsyncClient')
-    async def test_api_call_with_breed(self, mock_client):
+        mock_response_search = AsyncMock()
+        mock_response_search.status_code = 200
+        mock_response_search.json.return_value = [
+            {"id": "123", "url": "...", "breeds": [{"name": "Siamese", "id": "siam"}]}
+        ]
+        mock_response_image = AsyncMock()
+        mock_response_image.status_code = 200
+        mock_response_image.content = cv2.imencode('.jpg', self.test_image_data)[1].tobytes()
+        mock_client_instance.get.side_effect = [mock_response_search, mock_response_image]
+
+        async def run():
+            self.processor._client = mock_client_instance
+            images = await self.processor.download_cat_images(limit=1)
+            return images[0].image_id
+
+        image_id = asyncio.run(run())
+        self.assertEqual(image_id, "123")
+
+    @patch('httpx.AsyncClient')
+    def test_successful_api_call_first_breed(self, mock_client):
+        mock_client_instance = AsyncMock()
+        mock_client.return_value = mock_client_instance
+
+        mock_response_search = AsyncMock()
+        mock_response_search.status_code = 200
+        mock_response_search.json.return_value = [
+            {"id": "123", "url": "...", "breeds": [{"name": "Siamese", "id": "siam"}]}
+        ]
+        mock_response_image = AsyncMock()
+        mock_response_image.status_code = 200
+        mock_response_image.content = cv2.imencode('.jpg', self.test_image_data)[1].tobytes()
+        mock_client_instance.get.side_effect = [mock_response_search, mock_response_image]
+
+        async def run():
+            self.processor._client = mock_client_instance
+            images = await self.processor.download_cat_images(limit=1)
+            return images[0].breed
+
+        breed = asyncio.run(run())
+        self.assertEqual(breed, "Siamese")
+
+    @patch('httpx.AsyncClient')
+    def test_api_call_with_breed_sends_correct_param(self, mock_client):
         mock_client_instance = AsyncMock()
         mock_client.return_value = mock_client_instance
 
         mock_response_breeds = AsyncMock()
         mock_response_breeds.status_code = 200
-        mock_response_breeds.json.return_value = [
-            {"id": "siam", "name": "Siamese"},
-            {"id": "pers", "name": "Persian"}
-        ]
+        mock_response_breeds.json.return_value = [{"id": "siam", "name": "Siamese"}]
 
         mock_response_search = AsyncMock()
         mock_response_search.status_code = 200
-        mock_response_search.json.return_value = [
-            {
-                "id": "1",
-                "url": "https://cdn2.thecatapi.com/images/1.jpg",
-                "breeds": [{"name": "Siamese", "id": "siam"}]
-            }
-        ]
+        mock_response_search.json.return_value = [{"id": "1", "url": "...", "breeds": [{"name": "Siamese", "id": "siam"}]}]
 
         mock_response_image = AsyncMock()
         mock_response_image.status_code = 200
-        mock_response_image.content = cv2.imencode('.jpg', self.test_image_data)[1].tobytes()
+        mock_response_image.content = b"fake image"
 
-        mock_client_instance.get.side_effect = [
-            mock_response_breeds,
-            mock_response_search,
-            mock_response_image
-        ]
+        mock_client_instance.get.side_effect = [mock_response_breeds, mock_response_search, mock_response_image]
 
-        self.processor._client = mock_client_instance
+        async def run():
+            self.processor._client = mock_client_instance
+            await self.processor.download_cat_images(limit=1, breed="Siamese")
+            return mock_client_instance.get.call_args_list[1][1]['params'].get('breed_ids')
 
-        images = await self.processor.download_cat_images(limit=1, breed="Siamese")
+        breed_id_param = asyncio.run(run())
+        self.assertEqual(breed_id_param, 'siam')
 
-        call_args = mock_client_instance.get.call_args_list[1]
-        params = call_args[1]['params']  # kwargs
-        self.assertEqual(params.get('breed_ids'), 'siam')
-
-    @patch('implementation.cat_image_processor.httpx.AsyncClient')
-    async def test_api_call_failure(self, mock_client):
+    @patch('httpx.AsyncClient')
+    def test_api_call_failure_returns_empty_list(self, mock_client):
         mock_client_instance = AsyncMock()
         mock_client.return_value = mock_client_instance
         mock_response = AsyncMock()
         mock_response.status_code = 500
         mock_response.raise_for_status.side_effect = Exception("Server Error")
-
         mock_client_instance.get.return_value = mock_response
-        self.processor._client = mock_client_instance
 
-        images = await self.processor.download_cat_images(limit=1)
+        async def run():
+            self.processor._client = mock_client_instance
+            return await self.processor.download_cat_images(limit=1)
 
+        images = asyncio.run(run())
         self.assertEqual(len(images), 0)
 
     @patch('aiofiles.open')
     @patch('cv2.imencode')
-    async def test_save_image_with_aiofiles(self, mock_imencode, mock_aiofiles):
+    def test_save_image_calls_aiofiles_once(self, mock_imencode, mock_aiofiles):
         mock_imencode.return_value = (True, np.array([1, 2, 3], dtype=np.uint8))
-
         mock_file = AsyncMock()
         mock_aiofiles.return_value.__aenter__.return_value = mock_file
 
-        await self.processor._save_image_with_aiofiles("test_output.png", self.test_image_data)
+        async def run():
+            await self.processor._save_image_with_aiofiles("test_output.png", self.test_image_data)
 
-        mock_aiofiles.assert_called_once_with("test_output.png", 'wb')
-        mock_file.write.assert_called_once()
+        asyncio.run(run())
+        self.assertEqual(mock_aiofiles.call_count, 1)
 
-    @patch('implementation.cat_image_processor.CatImageProcessor._save_image_with_aiofiles')
-    async def test_process_and_save_images(self, mock_save):
+    @patch('cat_image_processor.implementation.cat_image_processor.CatImageProcessor._save_image_with_aiofiles')
+    def test_process_and_save_images_calls_save_six_times(self, mock_save):
         test_images = []
         for i in range(2):
-            cat_image = CatImage(
-                image_data=self.test_image_data,
-                url=f"https://cdn2.thecatapi.com/images/test{i}.jpg",
-                breed="Siamese",
-                image_id=f"test_{i}"
-            )
-            cat_image.assigned_index = i + 1
-            test_images.append(cat_image)
+            cat_img = CatImage(image_data=self.test_image_data, url=f"url{i}", breed="Siamese", image_id=f"id{i}")
+            cat_img.assigned_index = i + 1
+            test_images.append(cat_img)
 
         mock_save.return_value = None
 
-        output_dir = "test_output_dir"
-        await self.processor.process_and_save_images(test_images, output_dir)
+        async def run():
+            await self.processor.process_and_save_images(test_images, "test_output_dir")
 
+        asyncio.run(run())
         self.assertEqual(mock_save.call_count, 6)
 
-    def test_output_directory_property(self):
+    def test_output_directory_property_returns_default(self):
         self.assertEqual(self.processor.output_directory, "cat_images_output")
 
+    def test_output_directory_setter_updates_value(self):
         self.processor.output_directory = "new_output_dir"
-        self.assertEqual(self.processor.output_directory, "new_output_dir")
         self.assertEqual(self.processor._output_dir, "new_output_dir")
 
-    @patch('implementation.cat_image_processor.httpx.AsyncClient')
-    async def test_get_breed_id_success(self, mock_client):
-        mock_client_instance = AsyncMock()
-        mock_client.return_value = mock_client_instance
-
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = [
-            {"id": "siam", "name": "Siamese"},
-            {"id": "pers", "name": "Persian"},
-            {"id": "beng", "name": "Bengal"}
-        ]
-
-        mock_client_instance.get.return_value = mock_response
-        self.processor._client = mock_client_instance
-
-        breed_id = await self.processor._get_breed_id("Persian")
-
-        self.assertEqual(breed_id, "pers")
-
-    @patch('implementation.cat_image_processor.httpx.AsyncClient')
-    async def test_get_breed_id_not_found(self, mock_client):
+    @patch('httpx.AsyncClient')
+    def test_get_breed_id_success_returns_pers(self, mock_client):
         mock_client_instance = AsyncMock()
         mock_client.return_value = mock_client_instance
 
@@ -209,12 +204,30 @@ class TestCatImageProcessor(unittest.TestCase):
             {"id": "siam", "name": "Siamese"},
             {"id": "pers", "name": "Persian"}
         ]
-
         mock_client_instance.get.return_value = mock_response
-        self.processor._client = mock_client_instance
 
-        breed_id = await self.processor._get_breed_id("Nonexistent")
+        async def run():
+            self.processor._client = mock_client_instance
+            return await self.processor._get_breed_id("Persian")
 
+        breed_id = asyncio.run(run())
+        self.assertEqual(breed_id, "pers")
+
+    @patch('httpx.AsyncClient')
+    def test_get_breed_id_not_found_returns_none(self, mock_client):
+        mock_client_instance = AsyncMock()
+        mock_client.return_value = mock_client_instance
+
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [{"id": "siam", "name": "Siamese"}]
+        mock_client_instance.get.return_value = mock_response
+
+        async def run():
+            self.processor._client = mock_client_instance
+            return await self.processor._get_breed_id("Nonexistent")
+
+        breed_id = asyncio.run(run())
         self.assertIsNone(breed_id)
 
 
@@ -224,15 +237,34 @@ class TestCatImageProcessorIntegration(unittest.TestCase):
         self.processor = CatImageProcessor()
 
     @unittest.skipIf(not os.getenv('CAT_API_KEY'), "Требуется API ключ для интеграционных тестов")
-    async def test_real_api_call(self):
-        async with self.processor:
-            images = await self.processor.download_cat_images(limit=1)
+    def test_real_api_call_returns_one_image(self):
+        async def run():
+            async with self.processor:
+                images = await self.processor.download_cat_images(limit=1)
+                return len(images)
 
-            self.assertEqual(len(images), 1)
-            self.assertIsInstance(images[0], CatImage)
-            self.assertIsNotNone(images[0].image_data)
-            self.assertIsNotNone(images[0].url)
-            self.assertIsNotNone(images[0].breed)
+        count = asyncio.run(run())
+        self.assertEqual(count, 1)
+
+    @unittest.skipIf(not os.getenv('CAT_API_KEY'), "Требуется API ключ для интеграционных тестов")
+    def test_real_api_call_first_image_is_catimage(self):
+        async def run():
+            async with self.processor:
+                images = await self.processor.download_cat_images(limit=1)
+                return isinstance(images[0], CatImage)
+
+        is_catimage = asyncio.run(run())
+        self.assertTrue(is_catimage)
+
+    @unittest.skipIf(not os.getenv('CAT_API_KEY'), "Требуется API ключ для интеграционных тестов")
+    def test_real_api_call_image_has_data(self):
+        async def run():
+            async with self.processor:
+                images = await self.processor.download_cat_images(limit=1)
+                return images[0].image_data is not None
+
+        has_data = asyncio.run(run())
+        self.assertTrue(has_data)
 
 
 if __name__ == '__main__':

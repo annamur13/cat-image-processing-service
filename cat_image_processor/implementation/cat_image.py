@@ -1,10 +1,10 @@
 import cv2
 import numpy as np
 from pathlib import Path
-from typing import Optional, Union, Dict, Any
-from implementation.image_processing import ImageProcessing
-from implementation.opencv_image_processing import OpenCVImageProcessing
-from logging_config import logger
+from typing import Union
+from cat_image_processor.implementation.image_processing import ImageProcessing
+from cat_image_processor.implementation.opencv_image_processing import OpenCVImageProcessing
+
 
 class CatImage:
 

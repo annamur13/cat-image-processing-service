@@ -1,3 +1,5 @@
+# setup.py
+
 from setuptools import setup, find_packages
 
 setup(
@@ -5,7 +7,19 @@ setup(
     version="1.0.0",
     author="Murzina Anna",
     description="A package for downloading and processing cat images from TheCatAPI",
+    long_description=open("README.md", encoding="utf-8").read() if __name__ == "__main__" else "",
+    long_description_content_type="text/markdown",
     packages=find_packages(),
+
+    package_data={
+        "cat_image_processor": ["logging_config.json"],
+    },
+    include_package_data=True,
+    entry_points={
+        "console_scripts": [
+            "cat-process=cat_image_processor.main:main",
+        ],
+    },
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -19,5 +33,4 @@ setup(
         "httpx>=0.23.0",
         "aiofiles>=22.0.0",
     ],
-    include_package_data=True,
 )

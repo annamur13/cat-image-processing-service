@@ -4,9 +4,8 @@ import os
 
 sys.path.append(os.path.dirname(__file__))
 
-from implementation.cat_image_processor import CatImageProcessor
-from implementation.cat_image import CatImage
-from logging_config import logger
+from cat_image_processor.implementation import CatImageProcessor
+from cat_image_processor.logging_config import logger
 
 
 async def example_usage():

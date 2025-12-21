@@ -1,12 +1,10 @@
-import interfaces
+from cat_image_processor import interfaces
 import numpy as np
-from scipy.ndimage import maximum_filter
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing as mp
 from typing import Dict, Tuple, List
 import functools
-from logging_config import logger
-from interfaces.i_image_processing import IImageProcessing
+
 
 class ImageProcessing(interfaces.IImageProcessing):
 

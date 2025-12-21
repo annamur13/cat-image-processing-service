@@ -29,7 +29,7 @@ coverage.xml
 .ipynb_checkpoints
 
 # Environment variables
-.env
+../.env
 .env.local
 .env.production
 
